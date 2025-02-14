@@ -1,0 +1,62 @@
+import hashlib
+import os
+import json
+
+def calculate_hash(file_path, algorithm='sha256'):
+    """Calculate the hash of a file using the specified algorithm."""
+    hash_func = hashlib.new(algorithm)
+    try:
+        with open(file_path, 'rb') as f:
+            while chunk := f.read(4096):
+                hash_func.update(chunk)
+        return hash_func.hexdigest()
+    except FileNotFoundError:
+        print(f"Warning: File not found - {file_path}")
+        return None
+
+def scan_directory(directory, hash_store, algorithm='sha256'):
+    """Scan all files in a directory and store their hashes."""
+    file_hashes = {}
+    for root, _, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            file_hash = calculate_hash(file_path, algorithm)
+            if file_hash:
+                file_hashes[file_path] = file_hash
+    with open(hash_store, 'w') as f:
+        json.dump(file_hashes, f, indent=4)
+    print(f"Hashes stored in {hash_store}")
+
+def check_integrity(hash_store, algorithm='sha256'):
+    """Compare stored hashes with current file hashes."""
+    try:
+        with open(hash_store, 'r') as f:
+            stored_hashes = json.load(f)
+    except FileNotFoundError:
+        print("Error: Hash store file not found. Run the scan first.")
+        return
+
+    for file_path, old_hash in stored_hashes.items():
+        new_hash = calculate_hash(file_path, algorithm)
+        if new_hash is None:
+            print(f"[DELETED] {file_path}")
+        elif new_hash != old_hash:
+            print(f"[MODIFIED] {file_path}")
+        else:
+            print(f"[UNCHANGED] {file_path}")
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="File Integrity Checker")
+    parser.add_argument("directory", help="Directory to monitor")
+    parser.add_argument("--store", default="file_hashes.json", help="File to store hashes")
+    parser.add_argument("--check", action="store_true", help="Check integrity instead of scanning")
+    args = parser.parse_args()
+
+    if args.check:
+        check_integrity(args.store)
+    else:
+        scan_directory(args.directory, args.store)
+
+if __name__ == "__main__":
+    main()
